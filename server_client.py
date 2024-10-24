@@ -17,8 +17,7 @@ def main():
         pass
         # Crear rutina para gestionar cliente erroneo. TODO
         # Quizas habria que quitar esto
-    client_socket.sendall(f"Buenos dias cliente, conexión con el nuevo servidor establecida."
-                          f" Esperamos que confirme al puerto principal para completar la transferencia.".encode('utf-8'))
+    client_socket.sendall(f"Buenos dias cliente, conexión con el nuevo servidor establecida, confirme al puerto principal.".encode('utf-8'))
 
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Confirmado con el puerto principal. Quedamos a la espera de comandos.":
@@ -32,5 +31,27 @@ def main():
         data = client_socket.recv(1024).decode('utf-8')
         if data == "ls":
             client_socket.sendall("Sia, Sergimichi".encode('utf-8'))
+        elif data == "cd":
+            client_socket.sendall("cd".encode('utf-8'))
+        elif data == "help":
+            client_socket.sendall("help".encode('utf-8'))
+        elif data == "exit":
+            client_socket.sendall("exit".encode('utf-8'))
+        elif data[:1] == "rm":
+            client_socket.sendall("rm".encode('utf-8'))
+        elif data[:1] == "mv":
+            client_socket.sendall("mv".encode('utf-8'))
+        elif data[:5] == "upload":
+            client_socket.sendall("upload".encode('utf-8'))
+        elif data[:7] == "download":
+            client_socket.sendall("download".encode('utf-8'))
+        elif data == "pwd":
+            client_socket.sendall("pwd".encode('utf-8'))
+        elif data[:4] == "mkdir":
+            client_socket.sendall("mkdir".encode('utf-8'))
+        elif data[:4] == "rmdir":
+            client_socket.sendall("rmdir".encode('utf-8'))
+        else:
+            pass
 if __name__ == '__main__':
     main()
