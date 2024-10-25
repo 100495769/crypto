@@ -31,6 +31,7 @@ def get_port(ports_pool) -> int:
         finder_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         result = finder_socket.connect_ex(('localhost', port))
         if result != 0:
+            del ports_pool[counter]
             return port
         counter += 1
 
@@ -39,14 +40,15 @@ def get_port(ports_pool) -> int:
 
 # Crear un socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-ports_pool = list(range(49153, 65535))
+ports_pool = list(range(port() + 1, port() + 499))
 # Enlazar el socket a una dirección y puerto
 server_socket.bind(('127.0.0.1', port()))
 def signal_handler(sig, frame):
     pass
+signal.signal(signal.SIGUSR1, signal_handler)
+
 
 while True:
-    signal.signal(signal.SIGUSR1, signal_handler)
     # Escuchar por conexiones entrantes.
     server_socket.listen()
     client_socket, client_address = server_socket.accept()

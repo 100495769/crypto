@@ -2,8 +2,10 @@ import socket
 import sys
 import os
 import signal
-def main():
-    print(sys.argv)
+
+
+
+def server_client_setup():
     port_id = int(sys.argv[1])
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('127.0.0.1', port_id))
@@ -12,7 +14,7 @@ def main():
 
     server_socket.listen()
     client_socket, client_address = server_socket.accept()
-    print(os.getpid(),"Conexión recibida")
+    #print(os.getpid(), "Conexión recibida")
     if str(client_address[0]) != sys.argv[2] or str(client_address[1]) != sys.argv[3]:
         pass
         # Crear rutina para gestionar cliente erroneo. TODO
@@ -21,9 +23,54 @@ def main():
 
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Confirmado con el puerto principal. Quedamos a la espera de comandos.":
-        pass # Crear rutina para manejar esto TODO
+        pass  # Crear rutina para manejar esto TODO
+    return client_socket
 
-    client_socket.sendall("Los comandos disponibles son: help, exit, cd, ls, rm, mv, upload, download, pwd, mkdir, rmdir.".encode('utf-8'))
+
+
+def server_client_identification(client_socket) -> list:
+    valid = False
+    while not valid:
+        client_socket.sendall("Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8'))
+        username = client_socket.recv(1024).decode('utf-8')
+        print(username)
+        client_socket.sendall("Código de acceso: ".encode('utf-8'))
+        password = client_socket.recv(1024).decode('utf-8')
+        print(password)
+
+        #Check password and client blah blah blah make valid true if it is there.
+        valid = True
+    client_socket.sendall(f"Identificación completada con éxito.".encode('utf-8'))
+    client_socket.recv(1024)
+
+
+    return username
+
+def host_establish_connection(host_address):
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    server_socket.connect(host_address)
+    new_port = server_socket.recv(1024).decode('utf-8')
+    new_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_host.connect((host_address[0], int(new_port)))
+    return new_host
+
+
+
+
+
+
+
+
+
+
+def main():
+
+    client_socket = server_client_setup()
+    username = server_client_identification(client_socket)
+
+    client_socket.sendall(f"Buenos dias {username}.\nLos comandos disponibles son: help, exit, cd, ls, rm, mv, upload, download, pwd, mkdir, rmdir.\n "
+                          f"Quedamos a la espera de mas ordenes.".encode('utf-8'))
 
 
     while True:
@@ -37,21 +84,27 @@ def main():
             client_socket.sendall("help".encode('utf-8'))
         elif data == "exit":
             client_socket.sendall("exit".encode('utf-8'))
-        elif data[:1] == "rm":
-            client_socket.sendall("rm".encode('utf-8'))
-        elif data[:1] == "mv":
+            client_socket.close()
+        elif data[:2] == "mv":
             client_socket.sendall("mv".encode('utf-8'))
-        elif data[:5] == "upload":
-            client_socket.sendall("upload".encode('utf-8'))
-        elif data[:7] == "download":
-            client_socket.sendall("download".encode('utf-8'))
         elif data == "pwd":
             client_socket.sendall("pwd".encode('utf-8'))
-        elif data[:4] == "mkdir":
+        elif data[:5] == "mkdir":
             client_socket.sendall("mkdir".encode('utf-8'))
-        elif data[:4] == "rmdir":
+        elif data[:5] == "rmdir":
             client_socket.sendall("rmdir".encode('utf-8'))
+
+
+        elif data[:2] == "rm":
+            client_socket.sendall("rm".encode('utf-8'))
+        elif data[:6] == "upload":
+            client_socket.sendall("upload".encode('utf-8'))
+        elif data[:8] == "download":
+            client_socket.sendall("download".encode('utf-8'))
+
         else:
-            pass
+            client_socket.sendall(f"Invalid command {data}".encode('utf-8'))
+
+
 if __name__ == '__main__':
     main()
