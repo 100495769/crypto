@@ -56,7 +56,7 @@ while True:
 
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Buenos dias servidor, al habla el cliente!":
-        pass #Crear rutina para gestionar esto.
+        pass #Crear rutina para gestionar esto. TODO
     #print("Valores del cliente estables... ¡Estableciendo conexión segura!")
 
 
@@ -82,7 +82,7 @@ while True:
     #print('Thats one small step for (a) port, one giant leap for portkind.')
     # Espera a que el cliente confirme la conexion correcta.
 
-    data = client_socket.recv(1024)
+    data = client_socket.recv(1024) # Añadir un timeout por si el cliente corta la conexión antes. TODO
     if data.decode('utf-8') != ("Conexion con el nuevo servidor establecida. Les deseamos un buen dia."):
         # Crear rutina para manejar estas situaciones TODO
         pass

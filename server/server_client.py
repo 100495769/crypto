@@ -10,10 +10,10 @@ def server_client_setup():
     port_id = int(sys.argv[1])
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('127.0.0.1', port_id))
+    server_socket.listen()
+
 
     os.kill(os.getppid(), signal.SIGUSR1)
-
-    server_socket.listen()
     client_socket, client_address = server_socket.accept()
     #print(os.getpid(), "Conexión recibida")
     if str(client_address[0]) != sys.argv[2] or str(client_address[1]) != sys.argv[3]:
@@ -61,15 +61,10 @@ def find_file_host(file_name):
 
 def host_establish_connection(host_address):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print("1.1")
     server_socket.connect(host_address)
-    print("1.2")
     new_port = server_socket.recv(1024).decode('utf-8')
-    print("2.1")
     new_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print("2.2")
     new_host.connect((host_address[0], int(new_port)))
-    print("2.3")
     return new_host, new_port
 
 
@@ -90,7 +85,7 @@ def main():
                           f"Quedamos a la espera de mas ordenes.".encode('utf-8'))
 
     while True:
-        # Loop principal
+        # Loop principal SIA
         data = client_socket.recv(1024).decode('utf-8')
         if data == "ls":
             client_socket.sendall("Sia, Sergimichi".encode('utf-8'))
@@ -121,9 +116,7 @@ def main():
 
         elif data[:6] == "upload":
             host_address = find_file_host(data[7:])
-            print("1")
             host_socket, host_new_port = host_establish_connection(find_free_host(data[7:]))
-            print("2")
             host_socket.sendall("upload".encode('utf-8'))
             file_id = host_socket.recv(1024).decode('utf-8')
             host_client_address = str((host_address[0], int(host_new_port) + 1))
