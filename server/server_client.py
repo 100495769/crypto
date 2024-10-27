@@ -29,7 +29,7 @@ def server_client_setup():
     return client_socket
 
 
-
+# changed the output type to the userfile to get the data in the userfile after autentification
 def server_client_identification(client_socket) -> UserFile:
     valid = False
     while not valid:
@@ -73,37 +73,37 @@ def host_establish_connection(host_address):
 
 
 
-
+#function to manage all of the commands
 def command_manager(client_socket, user_file, data):
     if data == "ls":
         contents = user_file.list_contents()
         client_socket.sendall(json.dumps(contents, indent=4).encode('utf-8'))
-    elif data == "cd":
+    elif data[:2] == "cd":
         client_socket.sendall("cd".encode('utf-8'))
+        dirname = data[3:]
+        user_file.change_directory(dirname)
     elif data == "help":
         client_socket.sendall("help".encode('utf-8'))
     elif data == "exit":
         client_socket.sendall("exit".encode('utf-8'))
         client_socket.close()
-    elif data[:2] == "mv":
-        client_socket.sendall("mv".encode('utf-8'))
-    elif data == "pwd":
-        client_socket.sendall("pwd".encode('utf-8'))
+    # lets ignore it i beg u
+    #elif data[:2] == "mv":
+        #client_socket.sendall("mv".encode('utf-8'))
+    elif data[:3] == "pwd":
+        client_socket.sendall(f"{user_file.show_current_path()}".encode('utf-8'))
     elif data[:5] == "mkdir":
         user_file.make_new_dir(data[6:].strip())
         client_socket.sendall("mkdir".encode('utf-8'))
     elif data[:5] == "rmdir":
         # Take into account that the dir has files. Soo those files have to be deleted first TODO
         client_socket.sendall("rmdir".encode('utf-8'))
-
-
+        dirname = data[6:]
+        user_file.remove_directory(dirname)
     elif data[:2] == "rm":
         client_socket.sendall("rm".encode('utf-8'))
-
-
-
-
-
+        filename = data[3:]
+        user_file.delete_file(filename)
     elif data[:6] == "upload":
 
         host_address = find_file_host(data[7:])
@@ -124,8 +124,6 @@ def command_manager(client_socket, user_file, data):
             user_file.save_to_dir(location, data[7:].strip(), host_address, file_id)
 
         host_socket.close()
-
-
     elif data[:8] == "download":
         host_socket = host_establish_connection(find_file_host(data[9:]))
         client_socket.sendall("download".encode('utf-8'))

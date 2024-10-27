@@ -2,10 +2,12 @@ import os
 import json
 
 class UserFile:
-
+    """This class describes the structure of the json storage of information for each user.
+    Each json is stored on the server in a file user_files"""
     def __init__(self, username, storage_location='user_files'):
         self.username = username
         self.storage_location = storage_location
+        self.current_dir = ["home"]
 
         self.file_path = os.path.join(self.storage_location, f'{self.username}.json')
 
@@ -19,14 +21,16 @@ class UserFile:
             self.data = {"home": {}}
             self.save()
 
+    # saving data to json
     def save(self):
         with open(self.file_path, 'w') as f:
             json.dump(self.data, f, indent=4)
 
-
+    # writing new user file to json
     def write_new(self, filename, host_address, file_id):
-        if filename not in self.data["home"]:
-            self.data["home"][filename] = {
+        current_dir = self.get_current_directory()
+        if filename not in current_dir:
+            current_dir[filename] = {
                 "host_address": host_address,
                 "file_id": file_id
             }
@@ -34,18 +38,22 @@ class UserFile:
         else:
             print(f"File with a name {filename} already exists")
 
+    # creating of a new directory
     def make_new_dir(self, dirname):
-        if dirname not in self.data["home"]:
-            self.data["home"][dirname] = {}
+        current_dir = self.get_current_directory()
+        if dirname not in current_dir:
+            current_dir[dirname] = {}
             self.save()
         else:
             print(f"Directory {dirname} already exists")
         self.save()
 
+    # saving to the directory
     def save_to_dir(self, dirname, filename, host_address, file_id):
-        if dirname in self.data["home"]:
-            if filename not in self.data["home"][dirname]:
-                self.data["home"][dirname][filename] = {
+        current_dir = self.get_current_directory()
+        if dirname in current_dir:
+            if filename not in current_dir[dirname]:
+                current_dir[dirname][filename] = {
                     "host_address": host_address,
                     "file_id": file_id
                 }
@@ -55,12 +63,75 @@ class UserFile:
         else:
             print(f"Directory {dirname} does not exist.")
 
+    # removing the directory
+    def remove_directory(self, dirname):
+        current_dir = self.get_current_directory()
+        if dirname in current_dir:
+            current_dir.pop(dirname);
+            self.save()
+        else:
+            print(f"Directory {dirname} does not exist")
+
+    # changing the directory
+    def change_directory(self, dirname):
+        current_dir = self.get_current_directory()
+        if dirname == "../" or dirname == "..":
+            if len(self.current_dir) > 1:
+                self.current_dir.pop()
+            else:
+                print(f"You are at the root directory")
+        if dirname in current_dir:
+            self.current_dir.append(dirname)
+        else:
+            print(f"Directory {dirname} does not exist")
+
+    # in order to work with cd in future -> getting current directory
+    def get_current_directory(self):
+        current = self.data["home"]
+        for dir_name in self.current_dir[1:]:
+            current = current.get(dir_name, {})
+        return current
+
+    # display all contents
     def list_contents(self):
-        return self.data
+        current_dir = self.get_current_directory()
+        # you can represent it like this
+        #current_dir_name = self.current_dir[-1]
+        #return {current_dir_name:
+                #current_dir}
+        # or simplest way, but u will not see the name of directory you are in
+        return current_dir
+
+    # showing pwd
+    def show_current_path(self):
+        result = ""
+        for dir_name in self.current_dir:
+            result += "/" + dir_name
+        return result
+
+    # deleting file from directory
+    def delete_file(self, filename):
+        current_dir = self.get_current_directory()
+        if filename == current_dir[-1]:
+            print(f"You are trying to delete a directory.")
+        elif filename in current_dir:
+            current_dir.pop(filename)
+            self.save()
+        else:
+            print(f"File {filename} does not exist")
+
+    # silly method for sergio
+    def for_sergio(self, filename):
+        current_dir = self.get_current_directory()
+        if filename in current_dir:
+            file_data = current_dir[filename]
+            return tuple(file_data["host_address"]), file_data["file_id"]
+        return None, None
 
 
 class UsersInfo:
-
+    """This class describes the single json file for the storage of all the usernames and
+    passwords associated to them. It is stored exactly in the root of the server"""
     def __init__(self, username, storage_location='server'):
         self.username = username
         self.storage_location = storage_location
@@ -77,10 +148,12 @@ class UsersInfo:
             self.data = {}
             self.save()
 
+    # saving info to json
     def save(self):
         with open(self.file_path, 'w') as f:
             json.dump(self.data, f, indent=4)
 
+    # writing new user data to the file
     def write_new(self, username, password):
         if username not in self.data:
             self.data[username] = {
