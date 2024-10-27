@@ -88,25 +88,20 @@ class UserFile:
     # in order to work with cd in future -> getting current directory
     def get_current_directory(self):
         current = self.data["home"]
-        for dir_name in self.current_dir[1:]:
-            current = current.get(dir_name, {})
+        for dirname in self.current_dir[1:]:
+            current = current.get(dirname, {})
         return current
 
     # display all contents
     def list_contents(self):
         current_dir = self.get_current_directory()
-        # you can represent it like this
-        #current_dir_name = self.current_dir[-1]
-        #return {current_dir_name:
-                #current_dir}
-        # or simplest way, but u will not see the name of directory you are in
         return current_dir
 
     # showing pwd
     def show_current_path(self):
         result = ""
-        for dir_name in self.current_dir:
-            result += "/" + dir_name
+        for dirname in self.current_dir:
+            result += "/" + dirname
         return result
 
     # deleting file from directory
