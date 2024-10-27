@@ -1,10 +1,11 @@
 import socket
+import signal
 import sys
 import os
-import signal
+import json
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
-
-
+from fileStorage import UserFile
 
 def server_client_setup():
     port_id = int(sys.argv[1])
@@ -29,7 +30,7 @@ def server_client_setup():
 
 
 
-def server_client_identification(client_socket) -> list:
+def server_client_identification(client_socket) -> UserFile:
     valid = False
     while not valid:
         client_socket.sendall("Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8'))
@@ -44,8 +45,8 @@ def server_client_identification(client_socket) -> list:
     client_socket.sendall(f"Identificación completada con éxito.".encode('utf-8'))
     client_socket.recv(1024)
 
-
-    return username
+    user_file = UserFile(username)
+    return user_file
 
 def find_free_host(file):
     return ('localhost', port() + 500)
@@ -75,64 +76,70 @@ def host_establish_connection(host_address):
 
 
 
+def command_manager(client_socket, user_file, data):
+    if data == "ls":
+        contents = user_file.list_contents()
+        client_socket.sendall(json.dumps(contents, indent=4).encode('utf-8'))
+    elif data == "cd":
+        client_socket.sendall("cd".encode('utf-8'))
+    elif data == "help":
+        client_socket.sendall("help".encode('utf-8'))
+    elif data == "exit":
+        client_socket.sendall("exit".encode('utf-8'))
+        client_socket.close()
+    elif data[:2] == "mv":
+        client_socket.sendall("mv".encode('utf-8'))
+    elif data == "pwd":
+        client_socket.sendall("pwd".encode('utf-8'))
+    elif data[:5] == "mkdir":
+        client_socket.sendall("mkdir".encode('utf-8'))
+    elif data[:5] == "rmdir":
+        # Take into account that the dir has files. Soo those files have to be deleted first TODO
+        client_socket.sendall("rmdir".encode('utf-8'))
+
+
+    elif data[:2] == "rm":
+        client_socket.sendall("rm".encode('utf-8'))
+
+
+
+
+
+    elif data[:6] == "upload":
+        host_address = find_file_host(data[7:])
+        host_socket, host_new_port = host_establish_connection(find_free_host(data[7:]))
+        host_socket.sendall("upload".encode('utf-8'))
+        file_id = host_socket.recv(1024).decode('utf-8')
+        host_client_address = str((host_address[0], int(host_new_port) + 1))
+        client_socket.sendall(f"{host_client_address}".encode('utf-8'))
+        host_socket.close()
+
+        user_file.write_new(data[7:].strip(), host_address, file_id)
+        host_socket.close()
+
+
+
+
+    elif data[:8] == "download":
+        host_socket = host_establish_connection(find_file_host(data[9:]))
+        client_socket.sendall("download".encode('utf-8'))
+
+    else:
+        client_socket.sendall(f"Invalid command {data}".encode('utf-8'))
+
 
 def main():
 
     client_socket = server_client_setup()
-    username = server_client_identification(client_socket)
+    user_file = server_client_identification(client_socket)
 
-    client_socket.sendall(f"Buenos dias {username}.\nLos comandos disponibles son: help, exit, cd, ls, rm, mv, upload, download, pwd, mkdir, rmdir.\n "
+    client_socket.sendall(f"Buenos dias {user_file.username}.\nLos comandos disponibles son: help, exit, cd, ls, rm, mv, upload, download, pwd, mkdir, rmdir.\n "
                           f"Quedamos a la espera de mas ordenes.".encode('utf-8'))
 
     while True:
         # Loop principal SIA
         data = client_socket.recv(1024).decode('utf-8')
-        if data == "ls":
-            client_socket.sendall("Sia, Sergimichi".encode('utf-8'))
-        elif data == "cd":
-            client_socket.sendall("cd".encode('utf-8'))
-        elif data == "help":
-            client_socket.sendall("help".encode('utf-8'))
-        elif data == "exit":
-            client_socket.sendall("exit".encode('utf-8'))
-            client_socket.close()
-        elif data[:2] == "mv":
-            client_socket.sendall("mv".encode('utf-8'))
-        elif data == "pwd":
-            client_socket.sendall("pwd".encode('utf-8'))
-        elif data[:5] == "mkdir":
-            client_socket.sendall("mkdir".encode('utf-8'))
-        elif data[:5] == "rmdir":
-            # Take into account that the dir has files. Soo those files have to be deleted first TODO
-            client_socket.sendall("rmdir".encode('utf-8'))
-
-
-        elif data[:2] == "rm":
-            client_socket.sendall("rm".encode('utf-8'))
-
-
-
-
-
-        elif data[:6] == "upload":
-            host_address = find_file_host(data[7:])
-            host_socket, host_new_port = host_establish_connection(find_free_host(data[7:]))
-            host_socket.sendall("upload".encode('utf-8'))
-            file_id = host_socket.recv(1024).decode('utf-8')
-            host_client_address = str((host_address[0], int(host_new_port) + 1))
-            client_socket.sendall(f"{host_client_address}".encode('utf-8'))
-            host_socket.close()
-
-
-
-
-        elif data[:8] == "download":
-            host_socket = host_establish_connection(find_file_host(data[9:]))
-            client_socket.sendall("download".encode('utf-8'))
-
-        else:
-            client_socket.sendall(f"Invalid command {data}".encode('utf-8'))
-
+        command_manager(client_socket, user_file, data)
 
 if __name__ == '__main__':
     main()

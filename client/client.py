@@ -7,8 +7,12 @@
 # credentials. It will be sent the key to the files.
 
 import socket
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
-
+#from Crypto.Cipher import ChaCha20
+#from Crypto.Random import get_random_bytes
 
 def client_setup():
     # Crear un socket
@@ -28,7 +32,7 @@ def client_setup():
     data = data.decode('utf-8')
 
     port_id = int(data)  # Unpack as a big-endian unsigned int
-   #print(f"Puerto recibido con el número {port_id}, esperando señal para establecer conexion.")
+    print(f"Puerto recibido con el número {port_id}, esperando señal para establecer conexion.")
 
     server_address = (server_address[0], port_id)
     new_client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -61,8 +65,6 @@ def client_identification(client_socket):
         if client_socket.recv(1024).decode('utf-8') == "Identificación completada con éxito.":
             valid = True
     client_socket.sendall("Roger that".encode('utf-8'))
-
-
 
 def main():
 

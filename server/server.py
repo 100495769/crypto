@@ -13,11 +13,24 @@
 
 
 import signal
+#from Crypto.PublicKey import RSA
 
 import time
 import socket
 import os
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
+print("Imported port successfully")
+
+"""def generate_keys ():
+    key = RSA.generate(1024)
+    # Set the private_key variable to the generated key
+    private_key = key
+    # Derive the public key from the generated key
+    public_key = key.publickey()
+    return private_key, public_key"""
 
 def get_port(ports_pool) -> int:
     # This function returns an available port from the ports_pool
@@ -38,6 +51,7 @@ def get_port(ports_pool) -> int:
     # If no available port return -1
     return -1
 
+
 # Crear un socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ports_pool = list(range(port() + 1, port() + 499))
@@ -52,8 +66,10 @@ while True:
     # Escuchar por conexiones entrantes.
     server_socket.listen()
     client_socket, client_address = server_socket.accept()
-    #print(f"Conexión establecida con {client_address}")
 
+    print(f"Conexión establecida con {client_address}")
+    #public_key, private_key = generate_keys()
+    #client_socket.send(public_key.export_key())
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Buenos dias servidor, al habla el cliente!":
         pass #Crear rutina para gestionar esto. TODO
@@ -91,3 +107,4 @@ while True:
         client_socket.close()
         with open("server_log.txt", 'a') as log:
             os.write(log.fileno(), str(time.time()).encode() + b": Connection Successful with " + (str(client_address[0]) + ":" + str(client_address[1]) + "\n").encode())
+

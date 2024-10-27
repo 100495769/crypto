@@ -2,7 +2,10 @@
 import signal
 import socket
 import time
+import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from port import port
 
 
 def get_port(ports_pool) -> int:
@@ -18,7 +21,7 @@ def get_port(ports_pool) -> int:
         result = finder_socket.connect_ex(('localhost', port))
         if result != 0:
             del ports_pool[counter]
-            del ports_pool[counter+1]
+            del ports_pool[counter+1] #=> why
             return port
         counter += 1
 
