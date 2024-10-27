@@ -5,7 +5,7 @@ import os
 import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
-from fileStorage import UserFile
+from fileStorage import UserFile, UsersInfo
 
 def server_client_setup():
     port_id = int(sys.argv[1])
@@ -39,12 +39,10 @@ def server_client_identification(client_socket) -> UserFile:
         client_socket.sendall("Código de acceso: ".encode('utf-8'))
         password = client_socket.recv(1024).decode('utf-8')
         print(password)
-
         #Check password and client blah blah blah make valid true if it is there.
         valid = True
     client_socket.sendall(f"Identificación completada con éxito.".encode('utf-8'))
     client_socket.recv(1024)
-
     user_file = UserFile(username)
     return user_file
 
@@ -92,6 +90,7 @@ def command_manager(client_socket, user_file, data):
     elif data == "pwd":
         client_socket.sendall("pwd".encode('utf-8'))
     elif data[:5] == "mkdir":
+        user_file.make_new_dir(data[6:].strip())
         client_socket.sendall("mkdir".encode('utf-8'))
     elif data[:5] == "rmdir":
         # Take into account that the dir has files. Soo those files have to be deleted first TODO
@@ -106,6 +105,7 @@ def command_manager(client_socket, user_file, data):
 
 
     elif data[:6] == "upload":
+
         host_address = find_file_host(data[7:])
         host_socket, host_new_port = host_establish_connection(find_free_host(data[7:]))
         host_socket.sendall("upload".encode('utf-8'))
@@ -114,10 +114,16 @@ def command_manager(client_socket, user_file, data):
         client_socket.sendall(f"{host_client_address}".encode('utf-8'))
         host_socket.close()
 
-        user_file.write_new(data[7:].strip(), host_address, file_id)
+        # if u can make it slay that it is asked not on the server window i
+        # would be very glad bc im dumb TODO SERGIO
+        location = input("In which directory do you want to write?")
+        print(f"User specified directory: {location}")
+        if location == "home":
+            user_file.write_new(data[7:].strip(), host_address, file_id)
+        else:
+            user_file.save_to_dir(location, data[7:].strip(), host_address, file_id)
+
         host_socket.close()
-
-
 
 
     elif data[:8] == "download":
