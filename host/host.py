@@ -5,7 +5,6 @@ import time
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from port import port
 
 
 def get_port(ports_pool) -> int:
@@ -21,7 +20,7 @@ def get_port(ports_pool) -> int:
         result = finder_socket.connect_ex(('localhost', port))
         if result != 0:
             del ports_pool[counter]
-            del ports_pool[counter+1] #=> why
+            del ports_pool[counter+1]
             return port
         counter += 1
 
@@ -34,9 +33,6 @@ def signal_handler(sig, frame):
 def main():
     # No me preguntes por qué lo tengo que importar aquí.
     from port import port
-
-
-
 
     signal.signal(signal.SIGUSR1, signal_handler)
     host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -68,6 +64,7 @@ def main():
         server_socket.sendall(f"{port}".encode('utf-8'))
         print("Enviacion correcta")
         server_socket.close()
+
 
 if __name__ == '__main__':
     main()

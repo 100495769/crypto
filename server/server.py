@@ -3,30 +3,20 @@
 # It should also store the information of the user, login credentials and a random index to each file
 # of the user. The index will be used to ask the hosts to retrieve a file, making the hosts unable to
 # check which file they are storing
-
-
-
-# Arreglar la funcion de asignacion de puertos, no funciona.
-# Terminar TODOs
-# Manera limpia de terminarlo sighandler para sigstop?
-# Eso es all UwU hasta que se apliquen cripto cosas.
-
-
 import signal
-from Crypto.PublicKey import ECC
-from Crypto.Cipher import ChaCha20
-from Crypto.Random import get_random_bytes
-from Crypto.Protocol.DH import key_agreement
-from Crypto.Hash import SHAKE256
 import time
 import socket
 import sys
 import os
 
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from Crypto.PublicKey import ECC
+from Crypto.Cipher import ChaCha20
+from Crypto.Random import get_random_bytes
+from Crypto.Protocol.DH import key_agreement
+from Crypto.Hash import SHAKE256
 from port import port
-print("Imported port successfully")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 def get_port(ports_pool) -> int:
     # This function returns an available port from the ports_pool
@@ -47,16 +37,24 @@ def get_port(ports_pool) -> int:
     # If no available port return -1
     return -1
 
+
 def kdf(x):
     return SHAKE256.new(x).read(32)
+
+
 # Crear un socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ports_pool = list(range(port() + 1, port() + 499))
 # Enlazar el socket a una dirección y puerto
 server_socket.bind(('127.0.0.1', port()))
+
+
 def signal_handler(sig, frame):
     pass
+
+
 signal.signal(signal.SIGUSR1, signal_handler)
+
 
 def send_secure_message(socket, key, message):
     nonce = get_random_bytes(12)
@@ -66,12 +64,14 @@ def send_secure_message(socket, key, message):
     socket.sendall(cyphered_message)
     return 1
 
+
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
     encrypted_message = (socket.recv(1024))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
     return decrypted_message
+
 
 while True:
     # Establecimiento de clave asimetrica para esta sesion

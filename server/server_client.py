@@ -3,11 +3,13 @@ import signal
 import sys
 import os
 import json
+
+from port import port
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from port import port
 from fileStorage import UserFile, UsersInfo
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 def send_secure_message(socket, key, message):
     nonce = get_random_bytes(12)
@@ -17,6 +19,7 @@ def send_secure_message(socket, key, message):
     socket.sendall(cyphered_message)
     return 1
 
+
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
     print(f"Nonce:{nonce}")
@@ -24,6 +27,7 @@ def receive_secure_message(socket, key):
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
     return decrypted_message
+
 
 def server_client_setup():
     key = sys.argv[4]
@@ -34,18 +38,15 @@ def server_client_setup():
     server_socket.bind(('127.0.0.1', port_id))
     server_socket.listen()
 
-
     os.kill(os.getppid(), signal.SIGUSR1)
     client_socket, client_address = server_socket.accept()
     #print(os.getpid(), "Conexión recibida")
     if str(client_address[0]) != sys.argv[2] or str(client_address[1]) != sys.argv[3]:
         pass
-        # Crear rutina para gestionar cliente erroneo. TODO
-        # Quizas habria que quitar esto
+        # Crear rutina para gestionar cliente erroneo.
     return client_socket, key
 
 
-# changed the output type to the userfile to get the data in the userfile after autentification
 def server_client_identification(client_socket, key) -> UserFile:
     valid = False
     while not valid:

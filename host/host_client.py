@@ -20,12 +20,6 @@ def host_server_setup():
     return server_socket
 
 
-def download_setup(file_id, file):
-    pass
-
-
-
-
 def new_id():
     try:
         with open("id_storage.txt", "r+") as f:
@@ -35,8 +29,9 @@ def new_id():
             f.truncate()
         return id
     except:
-        pass  # Crear rutina para gestionar errores aqui, MUY IMPORTANTE ESTE TIPO DE ERROR
-        # No queremos sobre escribir en un id porque se pierde la informacion. TODO
+        pass  # Crear rutina para gestionar errores aqui
+        # No queremos sobre escribir en un id porque se pierde la informacion
+
 
 def client_setup():
     host_client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -78,6 +73,7 @@ def main():
                     break
                 client_socket.sendall(data)
         client_socket.close()
+
 
 if __name__ == '__main__':
     main()

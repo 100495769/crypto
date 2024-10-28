@@ -10,20 +10,19 @@ import socket
 import sys
 import os
 
-from cryptography.hazmat.primitives.asymmetric.ec import ECDH
-from google.protobuf.internal.test_bad_identifiers_pb2 import message
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
-from base64 import b64encode
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import HMAC, SHA256, SHAKE256
 from Crypto.PublicKey import ECC
 from Crypto.Protocol.DH import key_agreement
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 def kdf(x):
     return SHAKE256.new(x).read(32)
+
+
 def send_secure_message(socket, key, message):
     nonce = get_random_bytes(12)
     cipher = ChaCha20.new(key=key, nonce=nonce)
@@ -31,6 +30,7 @@ def send_secure_message(socket, key, message):
     socket.sendall(nonce)
     socket.sendall(cyphered_message)
     return 1
+
 
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
@@ -101,16 +101,10 @@ def check_hmac(cyphered_contents, hmac_value, key):
     else:
         return 0
 
-def send_file_to_server(file_data, client_socket):
-    file_data = "here should be the string? showing the file data" # TODO SERGIO help
-    client_socket.sendall(file_data.encode('utf-8'))
-
-
 def client_identification(client_socket, key):
     valid = False
     while not valid:
         # Nombre de usuario
-
         data = receive_secure_message(client_socket, key).decode('utf-8')
         print("[ Server ]: " + data)
         username = input()
@@ -122,7 +116,6 @@ def client_identification(client_socket, key):
         print("[ Server ]: " + data, end="")
         password = input()
         send_secure_message(client_socket, key, password.encode('utf-8'))
-        print("ACA TOY")
         data = receive_secure_message(client_socket, key).decode('utf-8')
         print("[ Server ]:" + data)
         if data == "Identificación completada con éxito." or data == "No existe el usuario indicado.\nAcabamos de crear una cuenta asociada a su usuario.":
@@ -130,12 +123,10 @@ def client_identification(client_socket, key):
     return
 
 
-
 def main():
 
     client_socket, key = client_setup()
     client_identification(client_socket, key)
-    print("Que tenia pedro?")
     send_secure_message(client_socket, key, "Why none listens to me?".encode('utf-8'))
     # Saludo de bienvenida.
     print(key)
@@ -213,8 +204,8 @@ def main():
 
         print("[ Server ]: " + data)
 
-
     client_socket.close()
+
 
 if __name__ == "__main__":
     main()
