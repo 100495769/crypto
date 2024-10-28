@@ -14,11 +14,10 @@
 
 import signal
 from Crypto.PublicKey import ECC
-from base64 import b64encode
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.DH import key_agreement
-from Crypto.Hash import SHA256, SHAKE256
+from Crypto.Hash import SHAKE256
 import time
 import socket
 import sys
@@ -28,14 +27,6 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
 print("Imported port successfully")
-
-"""def generate_keys ():
-    key = RSA.generate(1024)
-    # Set the private_key variable to the generated key
-    private_key = key
-    # Derive the public key from the generated key
-    public_key = key.publickey()
-    return private_key, public_key"""
 
 def get_port(ports_pool) -> int:
     # This function returns an available port from the ports_pool
@@ -70,7 +61,7 @@ signal.signal(signal.SIGUSR1, signal_handler)
 def send_secure_message(socket, key, message):
     nonce = get_random_bytes(12)
     cipher = ChaCha20.new(key=key, nonce=nonce)
-    cyphered_message = cipher.encrypt(message.encode('utf-8'))
+    cyphered_message = cipher.encrypt(message)
     socket.sendall(nonce)
     socket.sendall(cyphered_message)
     return 1
@@ -80,7 +71,7 @@ def receive_secure_message(socket, key):
     encrypted_message = (socket.recv(1024))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
-    return decrypted_message.decode('utf-8')
+    return decrypted_message
 
 while True:
     # Establecimiento de clave asimetrica para esta sesion
@@ -98,15 +89,6 @@ while True:
     client_public_key = ECC.import_key(client_socket.recv(1024).decode('utf-8'))
     key = key_agreement(static_pub=client_public_key, static_priv=private_key, kdf=kdf)
     print(key)
-    print(send_secure_message(client_socket, key, "Pelotas"))
-    data = client_socket.recv(1024)
-    if data.decode('utf-8') != "Buenos dias servidor, al habla el cliente!":
-        pass #Crear rutina para gestionar esto. TODO
-    #print("Valores del cliente estables... ¡Estableciendo conexión segura!")
-
-
-    # Crear un proceso server_client y comunicar el puerto en el momento adecuado al cliente.
-    client_socket.sendall(f"Buenos dias cliente, hace un dia soleado. Estamos gestionando la maniobra para asignare un puerto abierto al que dockear.".encode('utf-8'))
     port = str(get_port(ports_pool))
 
     while port == "-1":
@@ -117,23 +99,15 @@ while True:
     #Crear nuevo proceso para el cliente.
     pid = os.fork()
     if pid == 0:
-        os.execl("/usr/bin/python3","python3", os.path.join(os.getcwd(), "server_client.py"), port, str(client_address[0]), str(client_address[1]))
+        os.execl("/usr/bin/python3","python3", os.path.join(os.getcwd(), "server_client.py"), port, str(client_address[0]), str(client_address[1]), key.hex())
 
     # Espera a la señal de que el servidor se ha establecido correctamente. SIGUSR1
     signal.pause()
     # Comunicar el puerto al cliente.
-    client_socket.sendall(f"{port}".encode('utf-8'))
+    print(port)
+    send_secure_message(client_socket, key, port.encode('utf-8'))
 
-    #print('Thats one small step for (a) port, one giant leap for portkind.')
-    # Espera a que el cliente confirme la conexion correcta.
-
-    data = client_socket.recv(1024) # Añadir un timeout por si el cliente corta la conexión antes. TODO
-    if data.decode('utf-8') != ("Conexion con el nuevo servidor establecida. Les deseamos un buen dia."):
-        # Crear rutina para manejar estas situaciones TODO
-        pass
-    else:
-        # Cerrar conexion y logearlo.
-        client_socket.close()
-        with open("server_log.txt", 'a') as log:
-            os.write(log.fileno(), str(time.time()).encode() + b": Connection Successful with " + (str(client_address[0]) + ":" + str(client_address[1]) + "\n").encode())
-
+    # Cerrar conexion y logearlo.
+    client_socket.close()
+    with open("server_log.txt", 'a') as log:
+        os.write(log.fileno(), str(time.time()).encode() + b": Connection Successful with " + (str(client_address[0]) + ":" + str(client_address[1]) + "\n").encode())

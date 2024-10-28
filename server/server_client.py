@@ -3,11 +3,32 @@ import signal
 import sys
 import os
 import json
+from Crypto.Cipher import ChaCha20
+from Crypto.Random import get_random_bytes
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
 from fileStorage import UserFile, UsersInfo
 
+def send_secure_message(socket, key, message):
+    nonce = get_random_bytes(12)
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    cyphered_message = cipher.encrypt(message)
+    socket.sendall(nonce)
+    socket.sendall(cyphered_message)
+    return 1
+
+def receive_secure_message(socket, key):
+    nonce = socket.recv(12)
+    print(f"Nonce:{nonce}")
+    encrypted_message = (socket.recv(1024))
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    decrypted_message = cipher.decrypt(encrypted_message)
+    return decrypted_message
+
 def server_client_setup():
+    key = sys.argv[4]
+    key = bytes.fromhex(key)
+    print(key)
     port_id = int(sys.argv[1])
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('127.0.0.1', port_id))
@@ -21,49 +42,35 @@ def server_client_setup():
         pass
         # Crear rutina para gestionar cliente erroneo. TODO
         # Quizas habria que quitar esto
-    client_socket.sendall(f"Buenos dias cliente, conexión con el nuevo servidor establecida, confirme al puerto principal.".encode('utf-8'))
-
-    data = client_socket.recv(1024)
-    if data.decode('utf-8') != "Confirmado con el puerto principal. Quedamos a la espera de comandos.":
-        pass  # Crear rutina para manejar esto TODO
-    return client_socket
+    return client_socket, key
 
 
 # changed the output type to the userfile to get the data in the userfile after autentification
-def server_client_identification(client_socket) -> UserFile:
+def server_client_identification(client_socket, key) -> UserFile:
     valid = False
     while not valid:
-        client_socket.sendall("Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8'))
-        username = client_socket.recv(1024).decode('utf-8')
+
+        message = "Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8')
+        send_secure_message(client_socket, key, message)
+        username = receive_secure_message(client_socket, key).decode('utf-8')
         print(username)
-        client_socket.sendall("Código de acceso: ".encode('utf-8'))
-        password = client_socket.recv(1024).decode('utf-8')
+        send_secure_message(client_socket, key,"Código de acceso: ".encode('utf-8'))
+        password = receive_secure_message(client_socket, key).decode('utf-8')
         print(password)
         users_info = UsersInfo()
         if not users_info.check_existance(username):
-            print("You were not registered.")
             users_info.write_new(username, password)
-            print("You have been registered and logged in.")
+            message = "No existe el usuario indicado.\nAcabamos de crear una cuenta asociada a su usuario.".encode('utf-8')
             valid = True
-            """confirmation = input("Do you want to register? yes/no")
-            if confirmation == "yes":
-                users_info.write_new(username, password)
-                valid = True
-            elif confirmation == "no":
-                print("Goodbye!")
-                return -1
-            else:
-                print("Incorrect answer")"""
         else:
             stored_pass = users_info.data[username]["password"]
             if stored_pass == password:
-                print("User exists.")
+                message = "Identificación completada con éxito.".encode('utf-8')
                 valid = True
             else:
-                print("Wrong password.")
+                message = "Contraseña incorrecta. Reiniciando proceso de identificación.\n".encode('utf-8')
 
-    client_socket.sendall(f"Identificación completada con éxito.".encode('utf-8'))
-    client_socket.recv(1024)
+        send_secure_message(client_socket, key, message)
     user_file = UserFile(username)
     return user_file
 
@@ -94,34 +101,39 @@ def host_establish_connection(host_address):
 
 
 #function to manage all of the commands
-def command_manager(client_socket, user_file, data):
+def command_manager(client_socket, user_file, data, key):
     if data == "ls":
         contents = user_file.list_contents()
-        client_socket.sendall(json.dumps(contents, indent=4).encode('utf-8'))
+        message = json.dumps(contents, indent=4).encode('utf-8')
+        send_secure_message(client_socket, key, message)
     elif data[:2] == "cd":
-        client_socket.sendall("cd".encode('utf-8'))
+        message = "cd".encode('utf-8')
+        send_secure_message(client_socket, key, message)
         dirname = data[3:]
         user_file.change_directory(dirname)
     elif data == "help":
-        client_socket.sendall("help".encode('utf-8'))
+        message = "Los comandos disponibles son: help, exit, cd, ls, rm (not implementado todavia), upload, download, pwd, mkdir, rmdir.".encode('utf-8')
+        send_secure_message(client_socket, key, message)
     elif data == "exit":
-        client_socket.sendall("exit".encode('utf-8'))
-        client_socket.close()
-    # lets ignore it i beg u
-    #elif data[:2] == "mv":
-        #client_socket.sendall("mv".encode('utf-8'))
+        message = "exit".encode('utf-8')
+        send_secure_message(client_socket, key, message)
     elif data[:3] == "pwd":
-        client_socket.sendall(f"{user_file.show_current_path()}".encode('utf-8'))
+        message = f"{user_file.show_current_path()}".encode('utf-8')
+        send_secure_message(client_socket, key, message)
     elif data[:5] == "mkdir":
         user_file.make_new_dir(data[6:].strip())
-        client_socket.sendall("mkdir".encode('utf-8'))
+        message = "mkdir".encode('utf-8')
+        send_secure_message(client_socket, key, message)
     elif data[:5] == "rmdir":
         # Take into account that the dir has files. Soo those files have to be deleted first TODO
-        client_socket.sendall("rmdir".encode('utf-8'))
+        message = "rmdir".encode('utf-8')
+        send_secure_message(client_socket, key, message)
         dirname = data[6:]
         user_file.remove_directory(dirname)
     elif data[:2] == "rm":
-        client_socket.sendall("rm".encode('utf-8'))
+        # Bad remove not well done TODO
+        message = "rm".encode('utf-8')
+        send_secure_message(client_socket, key, message)
         filename = data[3:]
         user_file.delete_file(filename)
     elif data[:6] == "upload":
@@ -131,49 +143,51 @@ def command_manager(client_socket, user_file, data):
         host_socket.sendall("upload".encode('utf-8'))
         file_id = host_socket.recv(1024).decode('utf-8')
         host_client_address = str((host_address[0], int(host_new_port) + 1))
-        client_socket.sendall(f"{host_client_address}".encode('utf-8'))
+        host_client_Address = f"{host_client_address}".encode('utf-8')
+        send_secure_message(client_socket, key, host_client_Address)
         host_socket.close()
 
-        client_socket.sendall("In which directory do you want to write?".encode('utf-8'))
-        location = client_socket.recv(1024).decode('utf-8')
+        data2 = "In which directory do you want to write?"
+        send_secure_message(client_socket, key, data2.encode('utf-8'))
+        location, hmac, nonce = receive_secure_message(client_socket, key).decode('utf-8').split(',')
+        print("Comprueba AQUI"+hmac, nonce)
+
         if location == "home":
-            user_file.write_new(data[7:].strip(), host_address, file_id)
+            user_file.write_new(data[7:].strip(), host_address, file_id, key, hmac, nonce)
         else:
-            user_file.save_to_dir(location, data[7:].strip(), host_address, file_id)
+            user_file.save_to_dir(location, data[7:].strip(), host_address, file_id, key, hmac, nonce)
 
         host_socket.close()
     elif data[:8] == "download":
         # TODO SACAR CLAVE CRYPTO AQUI
-        host_address, file_id = user_file.for_sergio(data[8:].strip())
+        host_address, file_id, file_key, HMAC, nonce = user_file.for_sergio(data[8:].strip())
         host_address = (host_address[0], int(host_address[1]))
         host_socket, host_new_port = host_establish_connection(host_address)
         host_socket.sendall(f"download {file_id}".encode('utf-8'))
-        host_client_address = str((host_address[0], int(host_new_port) + 1))
-        client_socket.sendall(f"{host_client_address}".encode('utf-8'))
+        client_data =  str(host_address[0])+','+str(int(host_new_port)+1) + ',' + file_key + ',' + HMAC + ',' + nonce
+        send_secure_message(client_socket, key, client_data.encode('utf-8'))
         host_socket.close()
-        data = client_socket.recv(1024).decode('utf-8')
-        if data != "OK":
-            pass # TODO implementar rutina para manejar esto
-
-
-        client_socket.sendall("Download was successful.".encode('utf-8'))
 
     else:
-        client_socket.sendall(f"Invalid command {data}".encode('utf-8'))
+        message = f"Invalid command {data}".encode('utf-8')
+        send_secure_message(client_socket, key, message)
 
 
 def main():
 
-    client_socket = server_client_setup()
-    user_file = server_client_identification(client_socket)
-
-    client_socket.sendall(f"Buenos dias {user_file.username}.\nLos comandos disponibles son: help, exit, cd, ls, rm, mv, upload, download, pwd, mkdir, rmdir.\n "
-                          f"Quedamos a la espera de mas ordenes.".encode('utf-8'))
+    client_socket, key = server_client_setup()
+    user_file = server_client_identification(client_socket, key)
+    data = (f"Buenos dias {user_file.username}.\nLos comandos disponibles son: help, exit, cd, ls, rm (not implementado todavia), upload, download, pwd, mkdir, rmdir.\n "
+            f"Quedamos a la espera de mas ordenes.")
+    print("Pedro tenia un caballo")
+    receive_secure_message(client_socket,key).decode('utf-8')
+    send_secure_message(client_socket, key, data.encode('utf-8'))
 
     while True:
         # Loop principal SIA
-        data = client_socket.recv(1024).decode('utf-8')
-        command_manager(client_socket, user_file, data)
+        data = receive_secure_message(client_socket, key).decode('utf-8')
+        print("THIS OKA")
+        command_manager(client_socket, user_file, data, key)
 
 if __name__ == '__main__':
     main()

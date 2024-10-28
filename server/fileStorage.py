@@ -27,12 +27,16 @@ class UserFile:
             json.dump(self.data, f, indent=4)
 
     # writing new user file to json
-    def write_new(self, filename, host_address, file_id):
+    def write_new(self, filename, host_address, file_id, key, HMAC, nonce):
         current_dir = self.get_current_directory()
+        key = key.hex()
         if filename not in current_dir:
             current_dir[filename] = {
                 "host_address": host_address,
-                "file_id": file_id
+                "file_id": file_id,
+                "key": key,
+                "HMAC": HMAC,
+                "nonce": nonce
             }
             self.save()
         else:
@@ -49,13 +53,17 @@ class UserFile:
         self.save()
 
     # saving to the directory
-    def save_to_dir(self, dirname, filename, host_address, file_id):
+    def save_to_dir(self, dirname, filename, host_address, file_id, key, HMAC, nonce):
         current_dir = self.get_current_directory()
+        key = key.hex()
         if dirname in current_dir:
             if filename not in current_dir[dirname]:
                 current_dir[dirname][filename] = {
                     "host_address": host_address,
-                    "file_id": file_id
+                    "file_id": file_id,
+                    "key": key,
+                    "HMAC": HMAC,
+                    "nonce": nonce
                 }
                 self.save()
             else:
@@ -120,8 +128,8 @@ class UserFile:
         current_dir = self.get_current_directory()
         if filename in current_dir:
             file_data = current_dir[filename]
-            return tuple(file_data["host_address"]), file_data["file_id"]
-        return None, None
+            return tuple(file_data["host_address"]), file_data["file_id"], file_data["key"], file_data["HMAC"], file_data["nonce"]
+        return None, None, None, None, None
 
 
 class UsersInfo:
