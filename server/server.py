@@ -13,13 +13,18 @@
 
 
 import signal
-#from Crypto.PublicKey import RSA
-
+from Crypto.PublicKey import ECC
+from base64 import b64encode
+from Crypto.Cipher import ChaCha20
+from Crypto.Random import get_random_bytes
+from Crypto.Protocol.DH import key_agreement
+from Crypto.Hash import SHA256, SHAKE256
 import time
 import socket
-import os
 import sys
 import os
+
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
 print("Imported port successfully")
@@ -51,7 +56,8 @@ def get_port(ports_pool) -> int:
     # If no available port return -1
     return -1
 
-
+def kdf(x):
+    return SHAKE256.new(x).read(32)
 # Crear un socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ports_pool = list(range(port() + 1, port() + 499))
@@ -61,15 +67,38 @@ def signal_handler(sig, frame):
     pass
 signal.signal(signal.SIGUSR1, signal_handler)
 
+def send_secure_message(socket, key, message):
+    nonce = get_random_bytes(12)
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    cyphered_message = cipher.encrypt(message.encode('utf-8'))
+    socket.sendall(nonce)
+    socket.sendall(cyphered_message)
+    return 1
+
+def receive_secure_message(socket, key):
+    nonce = socket.recv(12)
+    encrypted_message = (socket.recv(1024))
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    decrypted_message = cipher.decrypt(encrypted_message)
+    return decrypted_message.decode('utf-8')
 
 while True:
+    # Establecimiento de clave asimetrica para esta sesion
+    private_key = ECC.generate(curve='P-256')
+    public_key = private_key.public_key()
+    public_key_for_client = public_key.export_key(format='PEM')
+
     # Escuchar por conexiones entrantes.
     server_socket.listen()
     client_socket, client_address = server_socket.accept()
 
     print(f"Conexión establecida con {client_address}")
-    #public_key, private_key = generate_keys()
-    #client_socket.send(public_key.export_key())
+
+    client_socket.sendall(public_key_for_client.encode('utf-8'))
+    client_public_key = ECC.import_key(client_socket.recv(1024).decode('utf-8'))
+    key = key_agreement(static_pub=client_public_key, static_priv=private_key, kdf=kdf)
+    print(key)
+    print(send_secure_message(client_socket, key, "Pelotas"))
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Buenos dias servidor, al habla el cliente!":
         pass #Crear rutina para gestionar esto. TODO

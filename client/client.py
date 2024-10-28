@@ -9,14 +9,40 @@
 import socket
 import sys
 import os
+
+from cryptography.hazmat.primitives.asymmetric.ec import ECDH
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
 from base64 import b64encode
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
-from Crypto.Hash import HMAC, SHA256
+from Crypto.Hash import HMAC, SHA256, SHAKE256
+from Crypto.PublicKey import ECC
+from Crypto.Protocol.DH import key_agreement
+
+def kdf(x):
+    return SHAKE256.new(x).read(32)
+def send_secure_message(socket, key, message):
+    nonce = get_random_bytes(12)
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    cyphered_message = cipher.encrypt(message.encode('utf-8'))
+    socket.sendall(nonce)
+    socket.sendall(cyphered_message)
+    return 1
+
+def receive_secure_message(socket, key):
+    nonce = socket.recv(12)
+    encrypted_message = (socket.recv(1024))
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    decrypted_message = cipher.decrypt(encrypted_message)
+    return decrypted_message.decode('utf-8')
+
 
 def client_setup():
+    private_key = ECC.generate(curve='P-256')
+    public_key = private_key.public_key()
+    public_key_for_server = public_key.export_key(format='PEM')
     # Crear un socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -25,6 +51,12 @@ def client_setup():
 
     # Conectar con el servidor
     client_socket.connect(server_address)
+
+    server_public_key = ECC.import_key(client_socket.recv(1024).decode('utf-8'))
+    client_socket.sendall(public_key_for_server.encode('utf-8'))
+    key = key_agreement(static_pub=server_public_key, static_priv=private_key, kdf=kdf)
+    print(key)
+    print(receive_secure_message(client_socket, key))
     client_socket.sendall(f"Buenos dias servidor, al habla el cliente!".encode('utf-8'))
     data = client_socket.recv(1024)
     if data.decode('utf-8') != "Buenos dias cliente, hace un dia soleado. Estamos gestionando la maniobra para asignare un puerto abierto al que dockear.":
@@ -107,6 +139,8 @@ def client_identification(client_socket):
             valid = True
     client_socket.sendall("Roger that".encode('utf-8'))
 
+
+
 def main():
 
     client_socket = client_setup()
@@ -124,7 +158,7 @@ def main():
 
         if command == "exit":
             exit = True
-        if command[:6] == "upload":
+        elif command[:6] == "upload":
             host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             ip, port = data[1:-1].split(",")
             print(f"{ip.strip()},{port},{str(int(port))}")
@@ -140,7 +174,26 @@ def main():
                         break
                     host_socket.sendall(datab)
             host_socket.close()
-
+            print("[ Server ]: " + client_socket.recv(1024).decode('utf-8'))
+            client_socket.sendall(input("[ User ]: ").encode('utf-8'))
+        elif command[:8] == "download":
+            host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print(f"DATA{data}")
+            ip, port = data[1:-1].split(",")
+            print(f"{ip.strip()},{str(int(port))}")
+            host_address = (ip.strip()[1:-1], int(port))
+            host_socket.connect(host_address)
+            file_name = command[8:].strip()
+            with open(file_name, "wb") as file:
+                # Recibe y escribe el archivo
+                while True:
+                    datab = host_socket.recv(1024)  # Buffer size
+                    if not datab:
+                        break
+                    file.write(datab)
+            host_socket.close()
+            client_socket.sendall("OK".encode('utf-8'))
+            data = client_socket.recv(1024).decode('utf-8')
         elif data == "Download accepted, prepare to receive jump coordinates!":
             pass
         print("[ Server ]: " + data)

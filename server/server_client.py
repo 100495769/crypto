@@ -50,8 +50,7 @@ def find_free_host(file):
     return ('localhost', port() + 500)
 # TODO search for a host that has space in a file
 
-def find_file_host(file_name):
-    return ('localhost', port()+ 500)
+
 
 
 
@@ -106,7 +105,7 @@ def command_manager(client_socket, user_file, data):
         user_file.delete_file(filename)
     elif data[:6] == "upload":
 
-        host_address = find_file_host(data[7:])
+        host_address = find_free_host(data[7:])
         host_socket, host_new_port = host_establish_connection(find_free_host(data[7:]))
         host_socket.sendall("upload".encode('utf-8'))
         file_id = host_socket.recv(1024).decode('utf-8')
@@ -114,10 +113,8 @@ def command_manager(client_socket, user_file, data):
         client_socket.sendall(f"{host_client_address}".encode('utf-8'))
         host_socket.close()
 
-        # if u can make it slay that it is asked not on the server window i
-        # would be very glad bc im dumb TODO SERGIO
-        location = input("In which directory do you want to write?")
-        print(f"User specified directory: {location}")
+        client_socket.sendall("In which directory do you want to write?".encode('utf-8'))
+        location = client_socket.recv(1024).decode('utf-8')
         if location == "home":
             user_file.write_new(data[7:].strip(), host_address, file_id)
         else:
@@ -125,8 +122,20 @@ def command_manager(client_socket, user_file, data):
 
         host_socket.close()
     elif data[:8] == "download":
-        host_socket = host_establish_connection(find_file_host(data[9:]))
-        client_socket.sendall("download".encode('utf-8'))
+        # TODO SACAR CLAVE CRYPTO AQUI
+        host_address, file_id = user_file.for_sergio(data[8:].strip())
+        host_address = (host_address[0], int(host_address[1]))
+        host_socket, host_new_port = host_establish_connection(host_address)
+        host_socket.sendall(f"download {file_id}".encode('utf-8'))
+        host_client_address = str((host_address[0], int(host_new_port) + 1))
+        client_socket.sendall(f"{host_client_address}".encode('utf-8'))
+        host_socket.close()
+        data = client_socket.recv(1024).decode('utf-8')
+        if data != "OK":
+            pass # TODO implementar rutina para manejar esto
+
+
+        client_socket.sendall("Download was successful.".encode('utf-8'))
 
     else:
         client_socket.sendall(f"Invalid command {data}".encode('utf-8'))

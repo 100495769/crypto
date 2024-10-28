@@ -38,12 +38,11 @@ def new_id():
         pass  # Crear rutina para gestionar errores aqui, MUY IMPORTANTE ESTE TIPO DE ERROR
         # No queremos sobre escribir en un id porque se pierde la informacion. TODO
 
-def upload_setup():
-    file_id = new_id()
+def client_setup():
     host_client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     host_client_socket.bind(('127.0.0.1', int(sys.argv[1]) + 1))
     host_client_socket.listen()
-    return file_id, host_client_socket
+    return host_client_socket
 
 
 def main():
@@ -53,7 +52,8 @@ def main():
     if command[:2] == "rm":
         pass
     elif command[:6] == "upload":
-        file_id, host_client_socket = upload_setup()
+        host_client_socket = client_setup()
+        file_id = new_id()
         print("Upload hecho")
         server_socket.sendall(file_id.encode('utf-8'))
         client_socket, client_address = host_client_socket.accept()
@@ -68,7 +68,16 @@ def main():
         client_socket.close()
         server_socket.close()
     elif command[:8] == "download":
-        download_setup(command[8:].strip())
+        host_client_socket = client_setup()
+        file_id = command[8:].strip()
+        client_socket, client_address = host_client_socket.accept()
+        with open(file_id, 'rb') as file:
+            while True:
+                data = file.read(1024)
+                if not data:
+                    break
+                client_socket.sendall(data)
+        client_socket.close()
 
 if __name__ == '__main__':
     main()
