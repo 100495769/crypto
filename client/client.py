@@ -11,8 +11,10 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
-#from Crypto.Cipher import ChaCha20
-#from Crypto.Random import get_random_bytes
+from base64 import b64encode
+from Crypto.Cipher import ChaCha20
+from Crypto.Random import get_random_bytes
+from Crypto.Hash import HMAC, SHA256
 
 def client_setup():
     # Crear un socket
@@ -45,6 +47,37 @@ def client_setup():
     new_client_socket.sendall("Confirmado con el puerto principal. Quedamos a la espera de comandos.".encode('utf-8'))
 
     return new_client_socket
+
+def encrypt_file(key, filename):
+    path = "./crypto/client"
+    encrypted_file = []
+    if filename in os.listdir(path):
+        file_path = os.path.join(path, filename)
+        if os.path.isfile(file_path):
+            nonce = get_random_bytes(12)
+            cipher = ChaCha20.new(key=key, nonce=nonce)
+
+            with open(file_path, 'rb') as f:
+                plaintext = f.read()
+
+            cyphered_file_contents = cipher.encrypt(plaintext)
+            hmac = HMAC.new(key, cyphered_file_contents, SHA256)
+            hmac_digest = hmac.digest()
+
+            encrypted_file.append({
+                'filename': filename,
+                'key': b64encode(key).decode('utf-8'),
+                'nonce': b64encode(nonce).decode('utf-8'),
+                'hmac': b64encode(hmac_digest).decode('utf-8'),
+            })
+
+            return {'cyphered_contents': cyphered_file_contents,
+            'file_data': encrypted_file}
+
+def send_file_to_server(file_data, client_socket):
+    file_data = "here should be the string? showing the file data" # TODO SERGIO help
+    client_socket.sendall(file_data.encode('utf-8'))
+
 
 def client_identification(client_socket):
     valid = False
