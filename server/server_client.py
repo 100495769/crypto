@@ -39,8 +39,29 @@ def server_client_identification(client_socket) -> UserFile:
         client_socket.sendall("Código de acceso: ".encode('utf-8'))
         password = client_socket.recv(1024).decode('utf-8')
         print(password)
-        #Check password and client blah blah blah make valid true if it is there.
-        valid = True
+        users_info = UsersInfo()
+        if not users_info.check_existance(username):
+            print("You were not registered.")
+            users_info.write_new(username, password)
+            print("You have been registered and logged in.")
+            valid = True
+            """confirmation = input("Do you want to register? yes/no")
+            if confirmation == "yes":
+                users_info.write_new(username, password)
+                valid = True
+            elif confirmation == "no":
+                print("Goodbye!")
+                return -1
+            else:
+                print("Incorrect answer")"""
+        else:
+            stored_pass = users_info.data[username]["password"]
+            if stored_pass == password:
+                print("User exists.")
+                valid = True
+            else:
+                print("Wrong password.")
+
     client_socket.sendall(f"Identificación completada con éxito.".encode('utf-8'))
     client_socket.recv(1024)
     user_file = UserFile(username)

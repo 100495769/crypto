@@ -127,8 +127,7 @@ class UserFile:
 class UsersInfo:
     """This class describes the single json file for the storage of all the usernames and
     passwords associated to them. It is stored exactly in the root of the server"""
-    def __init__(self, username, storage_location='server'):
-        self.username = username
+    def __init__(self, storage_location='usernames'):
         self.storage_location = storage_location
 
         self.file_path = os.path.join(self.storage_location, 'usernames.json')
@@ -157,6 +156,9 @@ class UsersInfo:
             self.save()
         else:
             print(f"Username {username} already exists")
+
+    def check_existance(self, username):
+        return username in self.data
 
     def list_contents(self):
         return list(self.data.keys())
