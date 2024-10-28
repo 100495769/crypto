@@ -74,6 +74,13 @@ def encrypt_file(key, filename):
             return {'cyphered_contents': cyphered_file_contents,
             'file_data': encrypted_file}
 
+def check_hmac(encrypted_file, hmac):
+    stored_hmac = b64encode(encrypted_file['hmac'])
+    if hmac.compare_digest(stored_hmac, hmac):
+        return 1
+    else:
+        return 0
+
 def send_file_to_server(file_data, client_socket):
     file_data = "here should be the string? showing the file data" # TODO SERGIO help
     client_socket.sendall(file_data.encode('utf-8'))
