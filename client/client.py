@@ -74,9 +74,10 @@ def encrypt_file(key, filename):
             return {'cyphered_contents': cyphered_file_contents,
             'file_data': encrypted_file}
 
-def check_hmac(encrypted_file, hmac):
-    stored_hmac = b64encode(encrypted_file['hmac'])
-    if hmac.compare_digest(stored_hmac, hmac):
+def check_hmac(encrypted_file, cyphered_contents, hmac):
+    hmac_stored = HMAC.new(encrypted_file['key'], cyphered_contents, SHA256)
+    hmac_digest = hmac_stored.digest()
+    if hmac.compare_digest(hmac_digest, hmac):
         return 1
     else:
         return 0
