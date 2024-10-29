@@ -14,9 +14,9 @@ from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.DH import key_agreement
 from Crypto.Hash import SHAKE256
-from port import port
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from port import port
 
 def get_port(ports_pool) -> int:
     # This function returns an available port from the ports_pool
@@ -88,7 +88,7 @@ while True:
     client_socket.sendall(public_key_for_client.encode('utf-8'))
     client_public_key = ECC.import_key(client_socket.recv(1024).decode('utf-8'))
     key = key_agreement(static_pub=client_public_key, static_priv=private_key, kdf=kdf)
-    print(key)
+    print("Clave simetrica en server.py: ", key)
     port = str(get_port(ports_pool))
 
     while port == "-1":

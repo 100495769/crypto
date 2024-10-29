@@ -13,10 +13,6 @@ def host_server_setup():
     host_socket.listen()
     server_socket, server_address = host_socket.accept()
 
-    if str(server_address[0]) != sys.argv[2] or str(server_address[1]) != sys.argv[3]:
-        pass
-        # Crear rutina para gestionar cliente erroneo. TODO
-        # Quizas habria que quitar esto
     return server_socket
 
 
@@ -29,8 +25,8 @@ def new_id():
             f.truncate()
         return id
     except:
-        pass  # Crear rutina para gestionar errores aqui
-        # No queremos sobre escribir en un id porque se pierde la informacion
+        pass
+
 
 
 def client_setup():
@@ -49,17 +45,15 @@ def main():
     elif command[:6] == "upload":
         host_client_socket = client_setup()
         file_id = new_id()
-        print("Upload hecho")
         server_socket.sendall(file_id.encode('utf-8'))
         client_socket, client_address = host_client_socket.accept()
-        print("Conexion con cliente completada")
         with open(file_id, 'wb') as f:
             while True:
                 data = client_socket.recv(1024)  # Buffer size
                 if not data:
                     break
                 f.write(data)
-        print("Gatito Escribido")
+        print("Archivo escrito")
         client_socket.close()
         server_socket.close()
     elif command[:8] == "download":
@@ -72,6 +66,7 @@ def main():
                 if not data:
                     break
                 client_socket.sendall(data)
+        print("Archivo mandado")
         client_socket.close()
 
 

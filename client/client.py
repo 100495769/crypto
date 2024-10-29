@@ -10,14 +10,14 @@ import socket
 import sys
 import os
 
-from port import port
+
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import HMAC, SHA256, SHAKE256
 from Crypto.PublicKey import ECC
 from Crypto.Protocol.DH import key_agreement
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+from port import port
 
 def kdf(x):
     return SHAKE256.new(x).read(32)
@@ -34,7 +34,6 @@ def send_secure_message(socket, key, message):
 
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
-    print(nonce)
     encrypted_message = (socket.recv(1024))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
@@ -57,7 +56,7 @@ def client_setup():
     server_public_key = ECC.import_key(client_socket.recv(1024).decode('utf-8'))
     client_socket.sendall(public_key_for_server.encode('utf-8'))
     key = key_agreement(static_pub=server_public_key, static_priv=private_key, kdf=kdf)
-    print(key)
+    print("Clave simetrica: ", key)
     port_id = int(receive_secure_message(client_socket, key))
     print(f"Puerto recibido con el número {port_id}, esperando señal para establecer conexion.")
 
@@ -129,12 +128,12 @@ def main():
     client_identification(client_socket, key)
     send_secure_message(client_socket, key, "Why none listens to me?".encode('utf-8'))
     # Saludo de bienvenida.
-    print(key)
-    print("SALUDO DE BIENVENIDA: ",receive_secure_message(client_socket, key).decode('utf-8'))
+    print("Clave simetrica", key)
+    print(receive_secure_message(client_socket, key).decode('utf-8'))
 
     exit = False
     while not exit:
-
+        data = None
         command = input("[ User ]: ")
         send_secure_message(client_socket, key, command.encode('utf-8'))
         data = receive_secure_message(client_socket, key).decode('utf-8')
@@ -144,7 +143,6 @@ def main():
         elif command[:6] == "upload":
             host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             ip, port = data[1:-1].split(",")
-            print(f"{ip.strip()},{port},{str(int(port))}")
             host_address = (ip.strip()[1:-1], int(port))
             host_socket.connect(host_address)
 
@@ -152,7 +150,6 @@ def main():
             encrypted_file = encrypt_file(key, file_path)
             cyphered_contents = encrypted_file['cyphered_contents']
             file_data = encrypted_file['file_data']
-            print(encrypted_file['file_data'])
             i = 0
             while i+1024 < len(cyphered_contents):
                 datab = cyphered_contents[i:i+1024]
@@ -173,15 +170,12 @@ def main():
             print("[ Server ]: " + receive_secure_message(client_socket, key).decode('utf-8'))
             new_data = input("[ User ]: ")
             new_data =new_data+','+file_data["hmac"]+','+file_data["nonce"]
-            print("Comprueba AQUI"+new_data)
             send_secure_message(client_socket, key, new_data.encode('utf-8'))
 
 
         elif command[:8] == "download":
             host_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print(f"DATA{data}")
             ip, port, file_key, HMAC, nonce = data.split(",")
-            print(f"Dirección del host = {ip.strip()},{str(int(port))}")
             host_socket.connect((ip, int(port)))
             file_name = command[8:].strip()
             with open(file_name, "wb") as file:

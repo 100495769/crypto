@@ -4,12 +4,12 @@ import sys
 import os
 import json
 
-from port import port
+
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from fileStorage import UserFile, UsersInfo
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+from port import port
 
 def send_secure_message(socket, key, message):
     nonce = get_random_bytes(12)
@@ -22,7 +22,6 @@ def send_secure_message(socket, key, message):
 
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
-    print(f"Nonce:{nonce}")
     encrypted_message = (socket.recv(1024))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
@@ -32,7 +31,7 @@ def receive_secure_message(socket, key):
 def server_client_setup():
     key = sys.argv[4]
     key = bytes.fromhex(key)
-    print(key)
+    print("Clave simetrica en server_client.py: ", key)
     port_id = int(sys.argv[1])
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('127.0.0.1', port_id))
@@ -40,10 +39,6 @@ def server_client_setup():
 
     os.kill(os.getppid(), signal.SIGUSR1)
     client_socket, client_address = server_socket.accept()
-    #print(os.getpid(), "Conexión recibida")
-    if str(client_address[0]) != sys.argv[2] or str(client_address[1]) != sys.argv[3]:
-        pass
-        # Crear rutina para gestionar cliente erroneo.
     return client_socket, key
 
 
@@ -54,10 +49,10 @@ def server_client_identification(client_socket, key) -> UserFile:
         message = "Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8')
         send_secure_message(client_socket, key, message)
         username = receive_secure_message(client_socket, key).decode('utf-8')
-        print(username)
+        print("Nombre de usuario logeandose: " + username)
         send_secure_message(client_socket, key,"Código de acceso: ".encode('utf-8'))
         password = receive_secure_message(client_socket, key).decode('utf-8')
-        print(password)
+        print("Contraseña de usuario logeandose: " + password)
         users_info = UsersInfo()
         if not users_info.check_existance(username):
             users_info.write_new(username, password)
@@ -101,8 +96,8 @@ def host_establish_connection(host_address):
 
 
 
-#function to manage all of the commands
 def command_manager(client_socket, user_file, data, key):
+
     if data == "ls":
         contents = user_file.list_contents()
         message = json.dumps(contents, indent=4).encode('utf-8')
@@ -151,7 +146,6 @@ def command_manager(client_socket, user_file, data, key):
         data2 = "In which directory do you want to write?"
         send_secure_message(client_socket, key, data2.encode('utf-8'))
         location, hmac, nonce = receive_secure_message(client_socket, key).decode('utf-8').split(',')
-        print("Comprueba AQUI"+hmac, nonce)
 
         if location == "home":
             user_file.write_new(data[7:].strip(), host_address, file_id, key, hmac, nonce)
@@ -180,14 +174,12 @@ def main():
     user_file = server_client_identification(client_socket, key)
     data = (f"Buenos dias {user_file.username}.\nLos comandos disponibles son: help, exit, cd, ls, rm (not implementado todavia), upload, download, pwd, mkdir, rmdir.\n "
             f"Quedamos a la espera de mas ordenes.")
-    print("Pedro tenia un caballo")
     receive_secure_message(client_socket,key).decode('utf-8')
     send_secure_message(client_socket, key, data.encode('utf-8'))
 
     while True:
         # Loop principal SIA
         data = receive_secure_message(client_socket, key).decode('utf-8')
-        print("THIS OKA")
         command_manager(client_socket, user_file, data, key)
 
 if __name__ == '__main__':

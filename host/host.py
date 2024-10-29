@@ -6,7 +6,6 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-
 def get_port(ports_pool) -> int:
     # This function returns an available port from the ports_pool
     counter = 0
@@ -41,9 +40,9 @@ def main():
 
     while True:
         host_socket.listen()
-        print('Waiting for a connection...')
+        print("Esperando conexion...")
         server_socket, server_address = host_socket.accept()
-        print("Conexionado")
+        print("Conectado con servidor.")
 
         port = str(get_port(ports_pool))
 
@@ -62,7 +61,7 @@ def main():
         # Comunicar el puerto al cliente.
         print("Enviado nuevo puerto")
         server_socket.sendall(f"{port}".encode('utf-8'))
-        print("Enviacion correcta")
+        print("Envio correcto")
         server_socket.close()
 
 
