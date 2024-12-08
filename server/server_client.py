@@ -4,9 +4,14 @@ import sys
 import os
 import json
 
-
+import datetime
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.x509 import load_pem_x509_certificate, NameOID, load_pem_x509_csr
+from cryptography import x509
+from cryptography.hazmat.primitives.asymmetric import padding
+
 from fileStorage import UserFile, UsersInfo
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
@@ -19,13 +24,14 @@ def send_secure_message(socket, key, message):
     socket.sendall(cyphered_message)
     return 1
 
-
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
-    encrypted_message = (socket.recv(1024))
+    encrypted_message = (socket.recv(16384))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
     return decrypted_message
+
+
 
 
 def server_client_setup():
@@ -39,45 +45,175 @@ def server_client_setup():
 
     os.kill(os.getppid(), signal.SIGUSR1)
     client_socket, client_address = server_socket.accept()
-    return client_socket, key
+    private_key_cert_password = sys.argv[5]
+    return client_socket, key, private_key_cert_password
 
+def verify_signature(certificate, challenge, signature):
+    public_key = certificate.public_key()
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    print("Clave pública en formato PEM:")
+    print(pem.decode('utf-8'))
+    print("Challenge: \n",challenge)
+    print("Signature: \n",signature)
+    try:
+        # Verificar la firma
+        public_key.verify(
+            signature,
+            challenge,
+            padding.PKCS1v15(),  # El mismo padding utilizado al firmar
+            hashes.SHA256()  # El mismo algoritmo de hash utilizado al firmar
+        )
+        print("Firma okay")
+        return 0
+        with open("certificate.pem", "rb") as f:
+            root_cert = load_pem_x509_certificate(f.read())
+        root_p_key = root_cert.public_key()
 
-def server_client_identification(client_socket, key) -> UserFile:
+        try:
+            #Ahora intentamos comprobar si fue emitido por este CA
+            root_p_key.verify(
+                certificate.signature,
+                certificate.tbs_certificate_bytes,  # Datos firmados
+                padding.PKCS1v15(),  # Tipo de padding usado durante la firma
+                certificate.signature_hash_algorithm,
+            )
+            print("Certificate verified")
+            return 0
+        except:
+            print("Certificate not verified")
+            return -1
+    except Exception as e:
+        print(f"Firma not verified {e}")
+        return -1
+
+def server_client_identification(client_socket, key, private_cert_key) -> UserFile:
     valid = False
     while not valid:
-
+        users_info = UsersInfo()
         message = "Bienvenido esperamos su nombre de identificación y su código de acceso. \nNombre de identificación: ".encode('utf-8')
+        #1.
         send_secure_message(client_socket, key, message)
+        #2.
         username = receive_secure_message(client_socket, key).decode('utf-8')
         print("Nombre de usuario logeandose: " + username)
-        send_secure_message(client_socket, key,"Código de acceso: ".encode('utf-8'))
-        password = receive_secure_message(client_socket, key).decode('utf-8')
-        print("Contraseña de usuario logeandose: " + password)
-        users_info = UsersInfo()
         if not users_info.check_existance(username):
-            users_info.write_new(username, password)
-            message = "No existe el usuario indicado.\nAcabamos de crear una cuenta asociada a su usuario.".encode('utf-8')
-            valid = True
-        else:
-            stored_pass = users_info.data[username]["password"]
-            if stored_pass == password:
-                message = "Identificación completada con éxito.".encode('utf-8')
-                valid = True
+            #Si no existe el usuario. Esperamos a saber si le intentamos registrar.
+            #3.
+            send_secure_message(client_socket, key, "user_not_registered".encode('utf-8'))
+            #4.
+            if not receive_secure_message(client_socket, key).decode('utf-8') == username:
+                return -1
             else:
-                message = "Contraseña incorrecta. Reiniciando proceso de identificación.\n".encode('utf-8')
+                #5.
+                send_secure_message(client_socket, key,"registering".encode('utf-8'))
+                #Receive the certificate request.
+                with open(f"{username}_csr.pem", "wb") as file:
+                    file.write(receive_secure_message(client_socket, key))
+                # Cargar el certificado desde el archivo
+                with open(f"{username}_csr.pem", "rb") as f:
+                    csr_data = f.read()
+                    csr = load_pem_x509_csr(csr_data)
+                # Cargar el Root CA
+                with open("certificate.pem", "rb") as f:
+                    cert_data = f.read()
+                    cert = load_pem_x509_certificate(cert_data)
+                # Cargamos la clave privada del certificado
+                with open("encrypted_private_key.pem", "rb") as f:
+                    encrypted_private_key = f.read()
+                print("Acatoy")
+                # Contraseña para descifrar
+                password = bytes.fromhex(private_cert_key)
 
-        send_secure_message(client_socket, key, message)
-    user_file = UserFile(username)
-    return user_file
+                # Deserializar la clave privada
+                private_key = serialization.load_pem_private_key(
+                    encrypted_private_key,
+                    password=password,
+                )
+
+
+                # Extraer el Common Name (CN) del Subject del certificado
+                subject_name = csr.subject
+                common_name = None
+                for attribute in subject_name:
+                    if attribute.oid == NameOID.COMMON_NAME:
+                        common_name = attribute.value
+                        break
+
+                if common_name != username:
+                    # Si el certificado a firmar no coincide con el usuario que queriamos registrar. Terminamos el proceso
+                    print("Nombre de usuario incorrecto.")
+                    return -1
+
+                else:
+                    # Crear el certificado a partir del CSR
+                    certificado = x509.CertificateBuilder().subject_name(
+                        csr.subject  # Usamos el sujeto del CSR
+                    ).issuer_name(
+                        # El emisor del certificado es el Root CA
+                        cert.subject
+                    ).public_key(
+                        csr.public_key()  # La clave pública del CSR
+                    ).serial_number(
+                        x509.random_serial_number()  # Número de serie único
+                    ).not_valid_before(
+                        datetime.datetime.utcnow()
+                    ).not_valid_after(
+                        # El certificado será válido por diez años
+                        datetime.datetime.utcnow() + datetime.timedelta(days=3650)
+                    ).add_extension(
+                        x509.SubjectKeyIdentifier.from_public_key(csr.public_key()),
+                        critical=False,
+                    ).add_extension(
+                        x509.KeyUsage(
+                            digital_signature=True,
+                            content_commitment=False,
+                            key_encipherment=False,
+                            data_encipherment=False,
+                            key_agreement=False,
+                            key_cert_sign=False,
+                            crl_sign=False,
+                            encipher_only=False,
+                            decipher_only=False,
+                        ),
+                        critical=True,
+                    ).add_extension(
+                        x509.BasicConstraints(ca=False, path_length=None),
+                        critical=True,
+                    ).sign(private_key, hashes.SHA256()) #Firmamos con clave privada de root
+                    with open(f"{username}_certificado.pem", "wb") as file:
+                        file.write(certificado.public_bytes(serialization.Encoding.PEM))
+                    with open(f"{username}_certificado.pem", "rb") as file:
+                        send_secure_message(client_socket, key, file.read())
+                    print("OKAY")
+
+                    # Eliminamos los certificados del usuario, aunque no sea comprometedor esto.
+                    #os.remove(f"{username}_certificado.pem")
+                    #os.remove(f"{username}_csr.pem", "wb")
+
+                    users_info.write_new(username)
+                    valid = True
+        else:
+            send_secure_message(client_socket, key, "user_registered".encode('utf-8'))
+            certificado_bytes = receive_secure_message(client_socket, key)
+            #with open(f"{username}_certificado.pem", "wb") as file:
+            #   file.write(certificado_bytes)
+            certificado = load_pem_x509_certificate(certificado_bytes)
+            challenge = os.urandom(32)
+            send_secure_message(client_socket, key, challenge)
+            signed = receive_secure_message(client_socket, key)
+            if verify_signature(certificado, challenge, signed) == 0:
+                send_secure_message(client_socket, key, "oka".encode('utf-8'))
+                return UserFile(username)
+            else:
+                send_secure_message(client_socket, key, "invalid".encode('utf-8'))
+                return -1
 
 def find_free_host(file):
     return ('localhost', port() + 500)
 # TODO search for a host that has space in a file
-
-
-
-
-
 
 
 
@@ -88,10 +224,6 @@ def host_establish_connection(host_address):
     new_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_host.connect((host_address[0], int(new_port)))
     return new_host, new_port
-
-
-
-
 
 
 
@@ -170,8 +302,11 @@ def command_manager(client_socket, user_file, data, key):
 
 def main():
 
-    client_socket, key = server_client_setup()
-    user_file = server_client_identification(client_socket, key)
+    client_socket, key, private_key_cert_password = server_client_setup()
+    user_file = server_client_identification(client_socket, key, private_key_cert_password)
+    if type(user_file) == int and user_file == -1:
+        #Si no se ha podido registrar o no ha iniciado sesion.
+        return -1
     data = (f"Buenos dias {user_file.username}.\nLos comandos disponibles son: help, exit, cd, ls, rm (not implementado todavia), upload, download, pwd, mkdir, rmdir.\n "
             f"Quedamos a la espera de mas ordenes.")
     receive_secure_message(client_socket,key).decode('utf-8')

@@ -10,12 +10,20 @@ import socket
 import sys
 import os
 
-
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import HMAC, SHA256, SHAKE256
 from Crypto.PublicKey import ECC
 from Crypto.Protocol.DH import key_agreement
+from cryptography.x509 import load_pem_x509_certificate, NameOID
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from port import port
 
@@ -31,10 +39,9 @@ def send_secure_message(socket, key, message):
     socket.sendall(cyphered_message)
     return 1
 
-
 def receive_secure_message(socket, key):
     nonce = socket.recv(12)
-    encrypted_message = (socket.recv(1024))
+    encrypted_message = (socket.recv(16384))
     cipher = ChaCha20.new(key=key, nonce=nonce)
     decrypted_message = cipher.decrypt(encrypted_message)
     return decrypted_message
@@ -100,32 +107,160 @@ def check_hmac(cyphered_contents, hmac_value, key):
     else:
         return 0
 
-def client_identification(client_socket, key):
-    valid = False
-    while not valid:
-        # Nombre de usuario
-        data = receive_secure_message(client_socket, key).decode('utf-8')
-        print("[ Server ]: " + data)
-        username = input()
-        print(username)
-        send_secure_message(client_socket, key, username.encode('utf-8'))
+def create_certificate_request(username):
+    # Generate our key
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
 
-        # Contraseña
+    # Generamos una contraseña para nuestra clave privada lo suficientemente larga para que sea segura. 512bits es muy superior a lo recomendado
+    # Hacemos esto para asegurarnos el no tener que cambiar la contraseña en un futuro.
+    clave = os.urandom(64)
+    # La contraseña para cifrar la private key del certificado la damos en hexadecimal
+    print("La contraseña es:\n", clave.hex(),
+          "\nSe ha creado tambien un fichero 'clave.txt', que contiene la clave.\nPorfavor memorice la contraseña y elimine este archivo y cualquier mencion de la contraseña de manera definitiva e irreversible, de inmediato .\nNo nos hacemos cargo de la seguridad de esta contraseña si no se cumple con lo mencionado.")
+    with open("clave.txt", "w") as file:
+        file.write(clave.hex())
+
+    with open("encrypted_private_key.pem", "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.BestAvailableEncryption(clave),
+        ))
+
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        # Provide various details about who we are.
+        x509.NameAttribute(NameOID.COMMON_NAME, username),
+    ])).sign(key, hashes.SHA256())
+    with open("csr.pem", "wb") as f:
+        f.write(csr.public_bytes(serialization.Encoding.PEM))
+
+def sign_challenge(private_key, challenge):
+    signature = private_key.sign(
+        challenge,
+        padding.PKCS1v15(),  # Algoritmo de relleno (padding)
+        hashes.SHA256()  # Algoritmo de hash
+    )
+    return signature
+def verify_signature(certificate, challenge, signature):
+    public_key = certificate.public_key()
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    print("Clave pública en formato PEM:")
+    print(pem.decode('utf-8'))
+    print("Challenge: \n", challenge)
+    print("Signature: \n", signature)
+
+    try:
+        # Verificar la firma
+        public_key.verify(
+            signature,
+            challenge,
+            padding.PKCS1v15(),  # El mismo padding utilizado al firmar
+            hashes.SHA256()  # El mismo algoritmo de hash utilizado al firmar
+        )
+        print("La firma es válida. Autenticación exitosa.")
+    except Exception as e:
+        print(f"Error de verificación de firma: {e}")
+
+def client_identification(client_socket, key):
+    # Nombre de usuario
+    #1.
+    data = receive_secure_message(client_socket, key).decode('utf-8')
+    print("[ Server ]: " + data)
+
+
+    try:
+        #Si hay certificado hacemos esto.
+        with open("usr_cert.pem", "rb") as f:
+            cert_data = f.read()
+            certificate = load_pem_x509_certificate(cert_data)
+
+        # Extraer el Common Name (CN) del Subject del certificado
+        subject_name = certificate.subject
+        username= None
+        for attribute in subject_name:
+            if attribute.oid == NameOID.COMMON_NAME:
+                username = attribute.value
+                break
+        send_secure_message(client_socket, key, username.encode('utf-8'))
         data = receive_secure_message(client_socket, key).decode('utf-8')
-        print("[ Server ]: " + data, end="")
-        password = input()
-        send_secure_message(client_socket, key, password.encode('utf-8'))
+        if data == "user_registered":
+            # Implementamos el inicio de sesion mediante firma. Primero mandamos nuestro certificado
+            with open("usr_cert.pem", "rb") as f:
+                send_secure_message(client_socket, key, f.read())
+            challenge = receive_secure_message(client_socket, key)
+            private_key_password = input("Introduzca la contraseña para la clave privada del certificado: ")
+            try:
+                with open("encrypted_private_key.pem", "rb") as f:
+                    encrypted_private_key = f.read()
+                    private_key = serialization.load_pem_private_key(
+                        encrypted_private_key,
+                        password=bytes.fromhex(private_key_password)
+                    )
+            except:
+                print("Clave invalida.")
+                return -1
+            signature = sign_challenge(private_key, challenge)
+            verify_signature(certificate, challenge, signature)
+            send_secure_message(client_socket, key, signature)
+            if receive_secure_message(client_socket, key).decode('utf-8') == "oka":
+                print("Validacion correcta y completada")
+                return
+            else:
+                print("Validacion incorrecta")
+                return -1
+        else:
+            print("No existe el usuario. El certificado es invalido.")
+            return -1
+    except:
+        print("No se ha encontrado un certificado en el dispositivo. Asegurese de guardar este certificado con el nombre: 'usr_cert.pem', en el directorio del cliente. Así como la clave privada: 'usr_key.pem'\nVamos a probar a registrarle.")
+        username = input("Ingrese el nombre del usuario: ")
+        #2.
+        send_secure_message(client_socket, key, username.encode('utf-8'))
+        #3.
         data = receive_secure_message(client_socket, key).decode('utf-8')
-        print("[ Server ]:" + data)
-        if data == "Identificación completada con éxito." or data == "No existe el usuario indicado.\nAcabamos de crear una cuenta asociada a su usuario.":
-            valid = True
+        if data == "user_registered":
+            # El usuario esta registrado por lo tanto tiene que cargar el certificado.
+            print("Usuario ya existente, por favor cargue el certificado correctamente.")
+            return -1
+        else:
+            # Registrar al usuario.
+            if input(
+                    "Usuario inexistente. Desea registrar nuevo usuario:\n'y' para crear un usuario nuevo\n'n' para salir\n").lower() == "y":
+                create_certificate_request(username)
+                #4.
+                send_secure_message(client_socket, key, username.encode('utf-8'))
+                #5.
+                receive_secure_message(client_socket, key)
+                with open("csr.pem", "rb") as file:
+                    # Read and send the file in chunks
+                    send_secure_message(client_socket, key, file.read())
+
+                with open("usr_cert.pem", "wb") as file:
+                    data = receive_secure_message(client_socket, key)
+                    print("Certificado recibido")
+                    file.write(data)
+
+            else:
+                print(
+                    "Recuerde almacenar el certificado como: 'certificate.pem', y la clave privada como: 'encrypted_private_key.pem'.")
+                return -1
+            pass
+            print("Pueba a iniciar sesion de nuevo.")
+            return -1
     return
 
 
 def main():
 
     client_socket, key = client_setup()
-    client_identification(client_socket, key)
+    if client_identification(client_socket, key) == -1:
+        return -1
     send_secure_message(client_socket, key, "Why none listens to me?".encode('utf-8'))
     # Saludo de bienvenida.
     print("Clave simetrica", key)
@@ -178,7 +313,7 @@ def main():
             ip, port, file_key, HMAC, nonce = data.split(",")
             host_socket.connect((ip, int(port)))
             file_name = command[8:].strip()
-            with open(file_name, "wb") as file:
+            with open("cifrado", "wb") as file:
                 # Recibe y escribe el archivo
                 while True:
                     datab = host_socket.recv(1024)  # Buffer size
@@ -186,13 +321,13 @@ def main():
                         break
                     file.write(datab)
             host_socket.close()
-            with open(file_name, 'rb') as file:  # Open the file in binary mode
+            with open("cifrado", 'rb') as file:  # Open the file in binary mode
                 content = file.read()
             #if check_hmac(content, HMAC, bytes.fromhex(file_key)):
             #    print("[ User ]: HMAC MATCHES, FILE HAS NOT BEEN ALTERED")
             cypher = ChaCha20.new(key=bytes.fromhex(file_key), nonce=bytes.fromhex(nonce))
             decyphered_contents = cypher.decrypt(content)
-            with open("descifrado.jpeg", "wb") as file:
+            with open(file_name, "wb") as file:
                 file.write(decyphered_contents)
             data = "Dowload process finished"
 

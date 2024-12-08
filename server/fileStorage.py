@@ -156,10 +156,10 @@ class UsersInfo:
             json.dump(self.data, f, indent=4)
 
     # writing new user data to the file
-    def write_new(self, username, password):
+    def write_new(self, username):
         if username not in self.data:
             self.data[username] = {
-                "password": password
+                "exists": "Si"
             }
             self.save()
         else:
